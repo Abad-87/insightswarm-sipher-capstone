@@ -10,9 +10,14 @@ from fastapi_users.authentication import (
 from fastapi_users.db import SQLAlchemyUserDatabase
 from app.models.models import User
 from app.api.dependencies import get_user_db
-import secrets
+import os
+from dotenv import load_dotenv
 
-SECRET = str(secrets.token_urlsafe(32))
+load_dotenv()
+SECRET = os.getenv("JWT_SECRET")
+
+if not SECRET:
+    raise ValueError("JWT_SECRET is not set. Please define JWT_SECRET in your .env file.")
 
 # UserManager class to handle user-related operations
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
@@ -60,3 +65,4 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](
 )
 
 current_active_user = fastapi_users.current_user(active=True)
+optional_current_user = fastapi_users.current_user(active=True, optional=True)

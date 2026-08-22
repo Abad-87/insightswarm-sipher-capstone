@@ -77,6 +77,47 @@ const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'http://localhost:3001';
 export default function SubmitPage() {
   const navigate = useNavigate();
   const [topic, setTopic] = useState('');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Sync auth securely via localStorage or postMessage from opener
+  useEffect(() => {
+    // 1. Check if token already exists in localStorage
+    const localToken = localStorage.getItem('insightswarm_token');
+    if (localToken) {
+      setIsLoggedIn(true);
+    }
+
+    // 2. Request auth from window.opener if opened from landing page
+    const handleAuthMessage = (event) => {
+      const allowedOrigins = ['http://localhost:3001', 'http://127.0.0.1:3001'];
+      if (!allowedOrigins.includes(event.origin)) return;
+      if (event.data && event.data.type === 'INSIGHTSWARM_AUTH_PAYLOAD') {
+        const { token, user } = event.data;
+        if (token) {
+          localStorage.setItem('insightswarm_token', token);
+          if (user) localStorage.setItem('insightswarm_user', JSON.stringify(user));
+          setIsLoggedIn(true);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleAuthMessage);
+
+    if (window.opener) {
+      const landingOrigins = ['http://localhost:3001', 'http://127.0.0.1:3001'];
+      landingOrigins.forEach((origin) => {
+        try {
+          window.opener.postMessage({ type: 'INSIGHTSWARM_GET_AUTH' }, origin);
+        } catch {
+          // ignore
+        }
+      });
+    }
+
+    return () => {
+      window.removeEventListener('message', handleAuthMessage);
+    };
+  }, []);
 
   const handleBackToLanding = (e) => {
     if (window.opener) {
@@ -171,13 +212,22 @@ export default function SubmitPage() {
       return;
     }
 
+    const token = localStorage.getItem('insightswarm_token');
+    if (!token) {
+      setError('You must be signed in to launch a research run. Please return to the home page to sign in.');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
     try {
       const res = await fetch(`${API_BASE}/research`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({
           topic,
           instructions,
@@ -186,7 +236,12 @@ export default function SubmitPage() {
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to start research');
+      if (!res.ok) {
+        if (res.status === 401) {
+          throw new Error('Session expired or unauthorized. Please sign in again.');
+        }
+        throw new Error('Failed to start research');
+      }
 
       const data = await res.json();
       setRunId(data.id);

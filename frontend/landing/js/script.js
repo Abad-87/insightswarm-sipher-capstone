@@ -3,12 +3,36 @@ const TARGETS = {
     dashboard: 'http://localhost:8501'
 };
 
+// Secure cross-origin auth provider for workspace
+window.addEventListener('message', (event) => {
+    const allowedOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+    if (!allowedOrigins.includes(event.origin)) return;
+    if (event.data && event.data.type === 'INSIGHTSWARM_GET_AUTH') {
+        if (typeof Auth !== 'undefined' && Auth.isLoggedIn()) {
+            const token = Auth.getToken();
+            const user = Auth.getUser();
+            if (token && event.source) {
+                event.source.postMessage({
+                    type: 'INSIGHTSWARM_AUTH_PAYLOAD',
+                    token,
+                    user
+                }, event.origin);
+            }
+        }
+    }
+});
+
 function setupNavigation() {
     document.querySelectorAll('.card[data-target]').forEach(card => {
         card.addEventListener('click', e => {
             e.preventDefault();
+            if (card.dataset.target === 'dashboard' && typeof Auth !== 'undefined' && !Auth.isLoggedIn()) {
+                return;
+            }
             const url = TARGETS[card.dataset.target];
-            if (url) window.open(url, '_blank');
+            if (url) {
+                window.open(url, '_blank');
+            }
         });
     });
 }
