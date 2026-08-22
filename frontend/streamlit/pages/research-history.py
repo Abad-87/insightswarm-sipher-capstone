@@ -12,17 +12,29 @@ BACKEND_URL = os.getenv(
 
 FAVICON_PATH = Path(__file__).resolve().parent.parent / "favicon.svg"
 
+INTERNAL_SECRET = os.getenv("INTERNAL_API_KEY", os.getenv("JWT_SECRET"))
+HEADERS = {"X-Internal-Key": INTERNAL_SECRET}
+
 #----Helper functions for API call---------
 def fetch_history_data():
     try:
-        response = requests.get(BACKEND_URL)
+        response = requests.get(BACKEND_URL, headers=HEADERS)
         if response.status_code == 200:
             return response.json().get("data", [])
     except requests.exceptions.ConnectionError:
         st.error("Could not connect to backend. Ensure backend is running.")
     except Exception as e:
         st.error(f"Error fetching history data: {e}")
-    return[]
+    return []
+
+def get_report_pdf(run_id: str):
+    try:
+        res = requests.get(f"{BACKEND_URL}/{run_id}/download", headers=HEADERS)
+        if res.status_code == 200:
+            return res.content
+    except Exception:
+        pass
+    return None
 
 #-----------Page Configuraion----------
 st.set_page_config(
@@ -470,13 +482,22 @@ else:
                     st.link_button("📄 View Report", url=f"http://localhost:5173/report/{item['id']}", use_container_width=True)
             with col3: #-------------Download Button--------------
                 if item["status"] == "Completed":
-                    st.link_button("⬇️ Download ", url=f"http://localhost:8000/api/research/{item['id']}/download", use_container_width=True)
+                    pdf_bytes = get_report_pdf(item['id'])
+                    if pdf_bytes:
+                        st.download_button(
+                            label="⬇️ Download",
+                            data=pdf_bytes,
+                            file_name=f"{item['title']}.pdf",
+                            mime="application/pdf",
+                            key=f"dl_{item['id']}",
+                            use_container_width=True
+                        )
             with col4: #------- Delete Button ----------------
                 if item["status"] == "Completed":
                     st.markdown("<div class='delete-btn-wrap'>", unsafe_allow_html=True)
                     if st.button("🗑️ Delete", key=f"delete_{item['id']}", use_container_width=True):
                         try:
-                            resp = requests.delete(f"{BACKEND_URL}/{item['id']}/delete")
+                            resp = requests.delete(f"{BACKEND_URL}/{item['id']}/delete", headers=HEADERS)
                             if resp.status_code == 200:
                                 st.success("Report deleted!")
                                 st.rerun()

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_async_session
 from typing import Any, Optional
@@ -27,6 +27,22 @@ from app.user import current_active_user, optional_current_user
 
 router = APIRouter()
 logger = get_logger(__name__)
+
+INTERNAL_SECRET = os.getenv("INTERNAL_API_KEY", os.getenv("JWT_SECRET"))
+
+async def get_authenticated_context(
+    user: Optional[User] = Depends(optional_current_user),
+    x_internal_key: Optional[str] = Header(None, alias="X-Internal-Key")
+) -> tuple[Optional[User], bool]:
+    """
+    Ensures caller is authenticated either through a valid user JWT or server-to-server internal key.
+    Raises 401 Unauthorized for unauthenticated external requests.
+    """
+    if user:
+        return user, False
+    if x_internal_key and x_internal_key == INTERNAL_SECRET:
+        return None, True
+    raise HTTPException(status_code=401, detail="Unauthorized")
 
 # --- Background Task Function ---
 # We use a separate database session maker here because the request-scoped 
@@ -234,8 +250,9 @@ async def start_research(
 @router.get("/research")
 async def list_research_runs(
     session: AsyncSession = Depends(get_async_session),
-    user: Optional[User] = Depends(optional_current_user)
+    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context)
 ):
+    user, _ = auth_ctx
     if user:
         stmt = (
             select(ResearchRun)
@@ -269,9 +286,10 @@ async def list_research_runs(
 @router.get("/research/{run_id}", response_model=ResearchRunResponse)
 async def get_research_status(
     run_id: str,
-    user: Optional[User] = Depends(optional_current_user),
+    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
     session: AsyncSession = Depends(get_async_session)
 ):
+    user, _ = auth_ctx
     if user:
         stmt = select(ResearchRun).where(
             ResearchRun.id == run_id,
@@ -289,9 +307,10 @@ async def get_research_status(
 @router.get("/research/{run_id}/report", response_model=ReportResponse)
 async def get_report_metadata(
     run_id: str,
-    user: Optional[User] = Depends(optional_current_user),
+    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
     session: AsyncSession = Depends(get_async_session)
 ):
+    user, _ = auth_ctx
     # Fetch the report and eagerly load the associated file relationship
     if user:
         stmt = (
@@ -333,9 +352,10 @@ async def get_report_metadata(
 async def download_report_pdf(
     run_id: str,
     inline: bool = False,
-    user: Optional[User] = Depends(optional_current_user),
+    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
     session: AsyncSession = Depends(get_async_session)
 ):
+    user, _ = auth_ctx
     # Fetch the report and its associated file
     if user:
         stmt = (
@@ -376,9 +396,10 @@ async def download_report_pdf(
 @router.post("/research/{run_id}/executive-summary", response_model=ExecutiveSummaryResponse)
 async def create_executive_summary(
     run_id: str,
-    user: Optional[User] = Depends(optional_current_user),
+    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
     session: AsyncSession = Depends(get_async_session)
 ):
+    user, _ = auth_ctx
     if user:
         stmt = (
             select(Report)
@@ -450,9 +471,10 @@ async def create_executive_summary(
 async def download_executive_summary_pdf(
     run_id: str,
     inline: bool = False,
-    user: Optional[User] = Depends(optional_current_user),
+    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
     session: AsyncSession = Depends(get_async_session)
 ):
+    user, _ = auth_ctx
     if user:
         stmt = (
             select(ExecutiveSummary)
@@ -489,9 +511,10 @@ async def download_executive_summary_pdf(
 @router.delete("/research/{run_id}/delete")
 async def delete_report(
     run_id: str,
-    user: Optional[User] = Depends(optional_current_user),
+    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
     session: AsyncSession = Depends(get_async_session)
 ):
+    user, _ = auth_ctx
     # Fetch the research run, report, associated file, and executive summary so the entire item can be removed.
     if user:
         stmt = select(ResearchRun).where(
