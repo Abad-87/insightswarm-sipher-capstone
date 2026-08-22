@@ -18,11 +18,25 @@ const Auth = {
 
     isLoggedIn() { return !!this.getToken(); },
 
+    login(token, user) {
+        this.setToken(token);
+        if (user) this.setUser(user);
+        renderAuthUI();
+        try {
+            const bc = new BroadcastChannel('insightswarm_auth');
+            bc.postMessage({ type: 'LOGIN', token, user });
+        } catch {}
+    },
+
     logout() {
         this.clearToken();
         this.clearUser();
         renderAuthUI();
         showToast('Signed out successfully', 'info');
+        try {
+            const bc = new BroadcastChannel('insightswarm_auth');
+            bc.postMessage({ type: 'LOGOUT' });
+        } catch {}
     }
 };
 
@@ -358,18 +372,15 @@ async function handleAuthSubmit(e) {
             }, 300);
         } else {
             const data = await apiLogin(email, password);
-            Auth.setToken(data.access_token);
-
-            // Fetch user profile
+            let profile = { email };
             try {
-                const user = await apiFetchMe(data.access_token);
-                Auth.setUser(user);
+                profile = await apiFetchMe(data.access_token);
             } catch {
-                Auth.setUser({ email });
+                profile = { email };
             }
 
+            Auth.login(data.access_token, profile);
             closeAuthModal();
-            renderAuthUI();
             showToast('Welcome back!', 'success');
         }
     } catch (err) {

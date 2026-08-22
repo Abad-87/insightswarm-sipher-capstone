@@ -79,15 +79,34 @@ export default function SubmitPage() {
   const [topic, setTopic] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Sync auth securely via localStorage or postMessage from opener
+  // Sync auth securely via localStorage, postMessage from opener, or BroadcastChannel
   useEffect(() => {
     // 1. Check if token already exists in localStorage
     const localToken = localStorage.getItem('insightswarm_token');
-    if (localToken) {
-      setIsLoggedIn(true);
+    setIsLoggedIn(!!localToken);
+
+    // 2. BroadcastChannel for instant cross-tab logout & login sync
+    let bc = null;
+    try {
+      bc = new BroadcastChannel('insightswarm_auth');
+      bc.onmessage = (event) => {
+        if (event.data?.type === 'LOGOUT') {
+          localStorage.removeItem('insightswarm_token');
+          localStorage.removeItem('insightswarm_user');
+          setIsLoggedIn(false);
+        } else if (event.data?.type === 'LOGIN' && event.data?.token) {
+          localStorage.setItem('insightswarm_token', event.data.token);
+          if (event.data.user) {
+            localStorage.setItem('insightswarm_user', JSON.stringify(event.data.user));
+          }
+          setIsLoggedIn(true);
+        }
+      };
+    } catch {
+
     }
 
-    // 2. Request auth from window.opener if opened from landing page
+    // 3. Request auth from window.opener if opened from landing page
     const handleAuthMessage = (event) => {
       const allowedOrigins = ['http://localhost:3001', 'http://127.0.0.1:3001'];
       if (!allowedOrigins.includes(event.origin)) return;
@@ -97,6 +116,11 @@ export default function SubmitPage() {
           localStorage.setItem('insightswarm_token', token);
           if (user) localStorage.setItem('insightswarm_user', JSON.stringify(user));
           setIsLoggedIn(true);
+        } else {
+          // Landing page is logged out -> clear workspace auth immediately
+          localStorage.removeItem('insightswarm_token');
+          localStorage.removeItem('insightswarm_user');
+          setIsLoggedIn(false);
         }
       }
     };
@@ -116,6 +140,7 @@ export default function SubmitPage() {
 
     return () => {
       window.removeEventListener('message', handleAuthMessage);
+      if (bc) bc.close();
     };
   }, []);
 
@@ -213,7 +238,8 @@ export default function SubmitPage() {
     }
 
     const token = localStorage.getItem('insightswarm_token');
-    if (!token) {
+    if (!token || !isLoggedIn) {
+      setIsLoggedIn(false);
       setError('You must be signed in to launch a research run. Please return to the home page to sign in.');
       return;
     }
@@ -238,7 +264,10 @@ export default function SubmitPage() {
 
       if (!res.ok) {
         if (res.status === 401) {
-          throw new Error('Session expired or unauthorized. Please sign in again.');
+          localStorage.removeItem('insightswarm_token');
+          localStorage.removeItem('insightswarm_user');
+          setIsLoggedIn(false);
+          throw new Error('Session expired or unauthorized. Please sign in again on the home page.');
         }
         throw new Error('Failed to start research');
       }
@@ -399,34 +428,34 @@ export default function SubmitPage() {
                       disabled={loading}
                       autoComplete="off"
                     />
-                    
-                  {speechSupported && (
-  <button
-    type="button"
-    onClick={handleMicClick}
-    disabled={loading}
-    title={isListening ? "Listening..." : "Speak your research topic"}
-    className={`ai-mic-btn ${isListening ? "listening" : ""}`}
-  >
-    <svg
-      className="ai-mic-icon"
-      width="18"
-      height="18"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-      <line x1="12" y1="19" x2="12" y2="23" />
-      <line x1="8" y1="23" x2="16" y2="23" />
-    </svg>
-  </button>
-)}
-                   
+
+                    {speechSupported && (
+                      <button
+                        type="button"
+                        onClick={handleMicClick}
+                        disabled={loading}
+                        title={isListening ? "Listening..." : "Speak your research topic"}
+                        className={`ai-mic-btn ${isListening ? "listening" : ""}`}
+                      >
+                        <svg
+                          className="ai-mic-icon"
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                          <line x1="12" y1="19" x2="12" y2="23" />
+                          <line x1="8" y1="23" x2="16" y2="23" />
+                        </svg>
+                      </button>
+                    )}
+
                   </div>
                 </motion.div>
 
