@@ -12,17 +12,54 @@ BACKEND_URL = os.getenv(
 
 FAVICON_PATH = Path(__file__).resolve().parent.parent / "favicon.svg"
 
-#----Helper functions for API call---------
+#----Helper functions for API call with User Bearer Token---------
+def get_auth_token():
+    token = None
+    if hasattr(st, "context") and hasattr(st.context, "cookies"):
+        token = st.context.cookies.get("insightswarm_token")
+    if not token:
+        token = st.session_state.get("token")
+    if token:
+        st.session_state["token"] = token
+    return token
+
+def get_auth_headers():
+    token = get_auth_token()
+    if token:
+        return {"Authorization": f"Bearer {token}"}
+    return {}
+
 def fetch_history_data():
+    headers = get_auth_headers()
+    if not headers:
+        st.warning("⚠️ Authentication required: Please sign in from the landing page to view your research history.")
+        return []
     try:
-        response = requests.get(BACKEND_URL)
+        response = requests.get(BACKEND_URL, headers=headers)
         if response.status_code == 200:
             return response.json().get("data", [])
+        elif response.status_code == 401:
+            st.warning("⚠️ Session expired or unauthenticated. Please sign in again from the landing page.")
+            return []
+        else:
+            st.error(f"Error fetching history data: Server responded with status {response.status_code}")
     except requests.exceptions.ConnectionError:
         st.error("Could not connect to backend. Ensure backend is running.")
     except Exception as e:
         st.error(f"Error fetching history data: {e}")
-    return[]
+    return []
+
+def get_report_pdf(run_id: str):
+    headers = get_auth_headers()
+    if not headers:
+        return None
+    try:
+        res = requests.get(f"{BACKEND_URL}/{run_id}/download", headers=headers)
+        if res.status_code == 200:
+            return res.content
+    except Exception:
+        pass
+    return None
 
 #-----------Page Configuraion----------
 st.set_page_config(
@@ -470,13 +507,22 @@ else:
                     st.link_button("📄 View Report", url=f"http://localhost:5173/report/{item['id']}", use_container_width=True)
             with col3: #-------------Download Button--------------
                 if item["status"] == "Completed":
-                    st.link_button("⬇️ Download ", url=f"http://localhost:8000/api/research/{item['id']}/download", use_container_width=True)
+                    pdf_bytes = get_report_pdf(item['id'])
+                    if pdf_bytes:
+                        st.download_button(
+                            label="⬇️ Download",
+                            data=pdf_bytes,
+                            file_name=f"{item['title']}.pdf",
+                            mime="application/pdf",
+                            key=f"dl_{item['id']}",
+                            use_container_width=True
+                        )
             with col4: #------- Delete Button ----------------
                 if item["status"] == "Completed":
                     st.markdown("<div class='delete-btn-wrap'>", unsafe_allow_html=True)
                     if st.button("🗑️ Delete", key=f"delete_{item['id']}", use_container_width=True):
                         try:
-                            resp = requests.delete(f"{BACKEND_URL}/{item['id']}/delete")
+                            resp = requests.delete(f"{BACKEND_URL}/{item['id']}/delete", headers=get_auth_headers())
                             if resp.status_code == 200:
                                 st.success("Report deleted!")
                                 st.rerun()

@@ -9,6 +9,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Extract and persist authentication token from cookie or session
+if hasattr(st, "context") and hasattr(st.context, "cookies"):
+    cookie_token = st.context.cookies.get("insightswarm_token")
+    if cookie_token:
+        st.session_state["token"] = cookie_token
+
 # ---------- Styling ----------
 st.markdown(
     """

@@ -234,7 +234,7 @@ async def start_research(
 @router.get("/research")
 async def list_research_runs(
     session: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user)  # Ensure the user is authenticated
+    user: User = Depends(current_active_user)
 ):
     stmt = (
         select(ResearchRun)

@@ -13,6 +13,13 @@ const LOADING_STEPS = [
 const BACKEND_BASE = 'http://127.0.0.1:8000'
 const API_BASE = `${BACKEND_BASE}/api`
 
+function getAuthToken() {
+  const local = localStorage.getItem('insightswarm_token')
+  if (local) return local
+  const match = document.cookie.match(/(^|;)\s*insightswarm_token\s*=\s*([^;]+)/)
+  return match ? decodeURIComponent(match[2]) : null
+}
+
 export default function ReportPage() {
   const { runId } = useParams()
   const navigate = useNavigate()
@@ -21,6 +28,7 @@ export default function ReportPage() {
   const [loadingTextIdx, setLoadingTextIdx] = useState(0)
   const [execSummary, setExecSummary] = useState(null)
   const [execSummaryLoading, setExecSummaryLoading] = useState(false)
+  const [pdfBlobUrl, setPdfUrl] = useState(null)
 
   // Cycle through loading text to provide an agentic feel during fetching
   useEffect(() => {
@@ -40,7 +48,12 @@ export default function ReportPage() {
 
     const fetchReport = async () => {
       try {
-        const response = await fetch(`${API_BASE}/research/${runId}/report`)
+        const token = getAuthToken()
+        const response = await fetch(`${API_BASE}/research/${runId}/report`, {
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        })
         
         if (response.status === 404) {
           // Report not created yet (backend generation in progress). Retry in 3s.
@@ -87,6 +100,42 @@ export default function ReportPage() {
     return url ? `${url}?inline=true` : ''
   }
 
+
+  useEffect(() => {
+    if (!report) return
+    let active = true
+    let blobUrl = null
+
+    const loadPdfBlob = async () => {
+      try {
+        const token = getAuthToken()
+        const downloadUrl = getFullDownloadUrl()
+        if (!downloadUrl) return
+        const response = await fetch(`${downloadUrl}?inline=true`, {
+          headers: {
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          }
+        })
+        if (response.ok) {
+          const blob = await response.blob()
+          if (active) {
+            blobUrl = URL.createObjectURL(blob)
+            setPdfUrl(blobUrl)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load preview blob:', err)
+      }
+    }
+
+    loadPdfBlob()
+
+    return () => {
+      active = false
+      if (blobUrl) URL.revokeObjectURL(blobUrl)
+    }
+  }, [report, runId])
+
   const getPagesCount = () => {
     if (report?.content_json?.pages !== undefined && report.content_json.pages !== null) {
       return report.content_json.pages
@@ -105,22 +154,42 @@ export default function ReportPage() {
     return `${minutes} min read`
   }
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const downloadUrl = getFullDownloadUrl()
     if (!downloadUrl) return
-    const link = document.createElement('a')
-    link.href = downloadUrl
-    link.setAttribute('download', `${report.title || 'research-report'}.pdf`)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
+    try {
+      const token = getAuthToken()
+      const response = await fetch(downloadUrl, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      })
+      if (!response.ok) throw new Error('Download failed')
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.setAttribute('download', `${report.title || 'research-report'}.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+    } catch (err) {
+      console.error('Download error:', err)
+    }
   }
 
   const handleGenerateSummary = async () => {
     if (execSummaryLoading) return
     setExecSummaryLoading(true)
     try {
-      const response = await fetch(`${API_BASE}/research/${runId}/executive-summary`, { method: 'POST' })
+      const token = getAuthToken()
+      const response = await fetch(`${API_BASE}/research/${runId}/executive-summary`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      })
       if (!response.ok) throw new Error(`Status: ${response.status}`)
       const data = await response.json()
       setExecSummary(data)
@@ -131,15 +200,29 @@ export default function ReportPage() {
     }
   }
 
-  const handleDownloadSummary = () => {
+  const handleDownloadSummary = async () => {
     if (!execSummary?.download_url) return
     const url = execSummary.download_url.startsWith('/') ? `${BACKEND_BASE}${execSummary.download_url}` : execSummary.download_url
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', `${report.title || 'executive-summary'}-summary.pdf`)
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
+    try {
+      const token = getAuthToken()
+      const response = await fetch(url, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      })
+      if (!response.ok) throw new Error('Summary download failed')
+      const blob = await response.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.setAttribute('download', `${report.title || 'executive-summary'}-summary.pdf`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
+    } catch (err) {
+      console.error('Summary download error:', err)
+    }
   }
 
   const formatDate = (dateString) => {
@@ -287,13 +370,22 @@ export default function ReportPage() {
             DOWNLOAD EXPORT (PDF)
           </button>
 
-          <button
-            onClick={handleGenerateSummary}
-            disabled={execSummaryLoading}
-            className="group relative mt-3 w-full overflow-hidden rounded-xl border border-teal-600/20 bg-white py-3.5 text-xs font-bold tracking-wider text-teal-700 shadow-sm transition-all hover:border-teal-500/40 hover:bg-teal-50 active:scale-[0.98] disabled:opacity-50"
+          {!execSummary ? (
+            <button
+              onClick={handleGenerateSummary}
+              disabled={execSummaryLoading}
+              className="group relative mt-3 w-full overflow-hidden rounded-xl border border-teal-600/20 bg-white py-3.5 text-xs font-bold tracking-wider text-teal-700 shadow-sm transition-all hover:border-teal-500/40 hover:bg-teal-50 active:scale-[0.98] disabled:opacity-50"
             >
               {execSummaryLoading ? 'GENERATING...' : '📝 GENERATE EXECUTIVE SUMMARY'}
-          </button>
+            </button>
+          ) : (
+            <button
+              onClick={handleDownloadSummary}
+              className="group relative mt-3 w-full overflow-hidden rounded-xl bg-teal-700 py-3.5 text-xs font-bold tracking-wider text-white shadow-md transition-all hover:bg-teal-800 active:scale-[0.98]"
+            >
+              ⬇️ DOWNLOAD EXECUTIVE SUMMARY (PDF)
+            </button>
+          )}
 
           <button
             onClick={() => navigate('/')}
@@ -303,18 +395,6 @@ export default function ReportPage() {
             <span>NEW REPORT</span>
           </button>
         </motion.div>
-        {execSummary && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="mt-4 rounded-xl border border-teal-100 bg-teal-50/40 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-mono text-[10px] tracking-widest text-teal-700 uppercase font-bold">Executive Summary</span>
-              {execSummary.download_url && (
-                <button onClick={handleDownloadSummary} className="text-[10px] font-bold text-teal-700 underline hover:text-teal-900">
-                  Download PDF
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
       </div>
 
       <div className="flex h-[50vh] min-h-80 w-full flex-1 flex-col bg-slate-50 z-10 p-4 sm:p-6 xl:p-8 lg:h-full lg:min-h-0">
@@ -324,7 +404,7 @@ export default function ReportPage() {
           </div>
           <iframe
             title="Research PDF Preview"
-            src={getFullPreviewUrl() || '/sample.pdf'}
+            src={pdfBlobUrl || getFullPreviewUrl() || '/sample.pdf'}
             className="h-full w-full flex-1 border-0 bg-slate-100/50"
           />
         </motion.div>
