@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Header
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_async_session
-from typing import Any, Optional
+from typing import Any
 
 from app.models.schemas import ResearchRequest, ResearchRunResponse, ReportResponse, ReportFileResponse
 from app.models.models import ResearchRun, Report, ReportFile, User
@@ -23,26 +23,10 @@ import os
 import re
 from app.core import get_logger, get_run_logger
 
-from app.user import current_active_user, optional_current_user
+from app.user import current_active_user
 
 router = APIRouter()
 logger = get_logger(__name__)
-
-INTERNAL_SECRET = os.getenv("INTERNAL_API_KEY", os.getenv("JWT_SECRET"))
-
-async def get_authenticated_context(
-    user: Optional[User] = Depends(optional_current_user),
-    x_internal_key: Optional[str] = Header(None, alias="X-Internal-Key")
-) -> tuple[Optional[User], bool]:
-    """
-    Ensures caller is authenticated either through a valid user JWT or server-to-server internal key.
-    Raises 401 Unauthorized for unauthenticated external requests.
-    """
-    if user:
-        return user, False
-    if x_internal_key and x_internal_key == INTERNAL_SECRET:
-        return None, True
-    raise HTTPException(status_code=401, detail="Unauthorized")
 
 # --- Background Task Function ---
 # We use a separate database session maker here because the request-scoped 
@@ -250,22 +234,14 @@ async def start_research(
 @router.get("/research")
 async def list_research_runs(
     session: AsyncSession = Depends(get_async_session),
-    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context)
+    user: User = Depends(current_active_user)
 ):
-    user, _ = auth_ctx
-    if user:
-        stmt = (
-            select(ResearchRun)
-            .where(ResearchRun.user_id == user.id)
-            .options(selectinload(ResearchRun.report))
-            .order_by(ResearchRun.created_at.desc())
-        )
-    else:
-        stmt = (
-            select(ResearchRun)
-            .options(selectinload(ResearchRun.report))
-            .order_by(ResearchRun.created_at.desc())
-        )
+    stmt = (
+        select(ResearchRun)
+        .where(ResearchRun.user_id == user.id)
+        .options(selectinload(ResearchRun.report))
+        .order_by(ResearchRun.created_at.desc())
+    )
     result = await session.execute(stmt)
     runs = result.scalars().all()
     
@@ -286,17 +262,13 @@ async def list_research_runs(
 @router.get("/research/{run_id}", response_model=ResearchRunResponse)
 async def get_research_status(
     run_id: str,
-    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
+    user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session)
 ):
-    user, _ = auth_ctx
-    if user:
-        stmt = select(ResearchRun).where(
-            ResearchRun.id == run_id,
-            ResearchRun.user_id == user.id
-        )
-    else:
-        stmt = select(ResearchRun).where(ResearchRun.id == run_id)
+    stmt = select(ResearchRun).where(
+        ResearchRun.id == run_id,
+        ResearchRun.user_id == user.id
+    )
     result = await session.execute(stmt)
     run = result.scalar_one_or_none()
     if not run:
@@ -307,27 +279,19 @@ async def get_research_status(
 @router.get("/research/{run_id}/report", response_model=ReportResponse)
 async def get_report_metadata(
     run_id: str,
-    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
+    user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session)
 ):
-    user, _ = auth_ctx
     # Fetch the report and eagerly load the associated file relationship
-    if user:
-        stmt = (
-            select(Report)
-            .join(ResearchRun, ResearchRun.id == Report.run_id)
-            .where(
-                Report.run_id == run_id,
-                ResearchRun.user_id == user.id
-            )
-            .options(selectinload(Report.file))
+    stmt = (
+        select(Report)
+        .join(ResearchRun, ResearchRun.id == Report.run_id)
+        .where(
+            Report.run_id == run_id,
+            ResearchRun.user_id == user.id
         )
-    else:
-        stmt = (
-            select(Report)
-            .where(Report.run_id == run_id)
-            .options(selectinload(Report.file))
-        )
+        .options(selectinload(Report.file))
+    )
     result = await session.execute(stmt)
     report = result.scalar_one_or_none()
 
@@ -352,27 +316,19 @@ async def get_report_metadata(
 async def download_report_pdf(
     run_id: str,
     inline: bool = False,
-    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
+    user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session)
 ):
-    user, _ = auth_ctx
     # Fetch the report and its associated file
-    if user:
-        stmt = (
-            select(ReportFile)
-            .join(Report, Report.id == ReportFile.report_id)
-            .join(ResearchRun, ResearchRun.id == Report.run_id)
-            .where(
-                Report.run_id == run_id,
-                ResearchRun.user_id == user.id
-            )
+    stmt = (
+        select(ReportFile)
+        .join(Report, Report.id == ReportFile.report_id)
+        .join(ResearchRun, ResearchRun.id == Report.run_id)
+        .where(
+            Report.run_id == run_id,
+            ResearchRun.user_id == user.id
         )
-    else:
-        stmt = (
-            select(ReportFile)
-            .join(Report, Report.id == ReportFile.report_id)
-            .where(Report.run_id == run_id)
-        )
+    )
     result = await session.execute(stmt)
     report_file = result.scalars().first()
 
@@ -396,26 +352,18 @@ async def download_report_pdf(
 @router.post("/research/{run_id}/executive-summary", response_model=ExecutiveSummaryResponse)
 async def create_executive_summary(
     run_id: str,
-    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
+    user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session)
 ):
-    user, _ = auth_ctx
-    if user:
-        stmt = (
-            select(Report)
-            .join(ResearchRun, ResearchRun.id == Report.run_id)
-            .where(
-                Report.run_id == run_id,
-                ResearchRun.user_id == user.id
-            )
-            .options(selectinload(Report.executive_summary))
+    stmt = (
+        select(Report)
+        .join(ResearchRun, ResearchRun.id == Report.run_id)
+        .where(
+            Report.run_id == run_id,
+            ResearchRun.user_id == user.id
         )
-    else:
-        stmt = (
-            select(Report)
-            .where(Report.run_id == run_id)
-            .options(selectinload(Report.executive_summary))
-        )
+        .options(selectinload(Report.executive_summary))
+    )
     result = await session.execute(stmt)
     report = result.scalar_one_or_none()
 
@@ -471,26 +419,18 @@ async def create_executive_summary(
 async def download_executive_summary_pdf(
     run_id: str,
     inline: bool = False,
-    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
+    user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session)
 ):
-    user, _ = auth_ctx
-    if user:
-        stmt = (
-            select(ExecutiveSummary)
-            .join(Report, Report.id == ExecutiveSummary.report_id)
-            .join(ResearchRun, ResearchRun.id == Report.run_id)
-            .where(
-                Report.run_id == run_id,
-                ResearchRun.user_id == user.id
-            )
+    stmt = (
+        select(ExecutiveSummary)
+        .join(Report, Report.id == ExecutiveSummary.report_id)
+        .join(ResearchRun, ResearchRun.id == Report.run_id)
+        .where(
+            Report.run_id == run_id,
+            ResearchRun.user_id == user.id
         )
-    else:
-        stmt = (
-            select(ExecutiveSummary)
-            .join(Report, Report.id == ExecutiveSummary.report_id)
-            .where(Report.run_id == run_id)
-        )
+    )
     result = await session.execute(stmt)
     summary = result.scalars().first()
 
@@ -511,26 +451,17 @@ async def download_executive_summary_pdf(
 @router.delete("/research/{run_id}/delete")
 async def delete_report(
     run_id: str,
-    auth_ctx: tuple[Optional[User], bool] = Depends(get_authenticated_context),
+    user: User = Depends(current_active_user),
     session: AsyncSession = Depends(get_async_session)
 ):
-    user, _ = auth_ctx
     # Fetch the research run, report, associated file, and executive summary so the entire item can be removed.
-    if user:
-        stmt = select(ResearchRun).where(
-            ResearchRun.id == run_id,
-            ResearchRun.user_id == user.id
-        ).options(
-            selectinload(ResearchRun.report).selectinload(Report.file),
-            selectinload(ResearchRun.report).selectinload(Report.executive_summary)
-        )
-    else:
-        stmt = select(ResearchRun).where(
-            ResearchRun.id == run_id
-        ).options(
-            selectinload(ResearchRun.report).selectinload(Report.file),
-            selectinload(ResearchRun.report).selectinload(Report.executive_summary)
-        )
+    stmt = select(ResearchRun).where(
+        ResearchRun.id == run_id,
+        ResearchRun.user_id == user.id
+    ).options(
+        selectinload(ResearchRun.report).selectinload(Report.file),
+        selectinload(ResearchRun.report).selectinload(Report.executive_summary)
+    )
     result = await session.execute(stmt)
     run = result.scalar_one_or_none()
 

@@ -6,15 +6,27 @@ const USER_KEY = 'insightswarm_user';
 
 const Auth = {
     getToken() { return localStorage.getItem(TOKEN_KEY); },
-    setToken(t) { localStorage.setItem(TOKEN_KEY, t); },
-    clearToken() { localStorage.removeItem(TOKEN_KEY); },
+    setToken(t) {
+        localStorage.setItem(TOKEN_KEY, t);
+        document.cookie = `${TOKEN_KEY}=${encodeURIComponent(t)}; path=/; max-age=86400; SameSite=Lax`;
+    },
+    clearToken() {
+        localStorage.removeItem(TOKEN_KEY);
+        document.cookie = `${TOKEN_KEY}=; path=/; max-age=0; SameSite=Lax`;
+    },
 
     getUser() {
         try { return JSON.parse(localStorage.getItem(USER_KEY)); }
         catch { return null; }
     },
-    setUser(u) { localStorage.setItem(USER_KEY, JSON.stringify(u)); },
-    clearUser() { localStorage.removeItem(USER_KEY); },
+    setUser(u) {
+        localStorage.setItem(USER_KEY, JSON.stringify(u));
+        document.cookie = `${USER_KEY}=${encodeURIComponent(JSON.stringify(u))}; path=/; max-age=86400; SameSite=Lax`;
+    },
+    clearUser() {
+        localStorage.removeItem(USER_KEY);
+        document.cookie = `${USER_KEY}=; path=/; max-age=0; SameSite=Lax`;
+    },
 
     isLoggedIn() { return !!this.getToken(); },
 
@@ -564,6 +576,9 @@ async function validateSession() {
 /*  init  */
 
 function initAuth() {
+    if (Auth.isLoggedIn()) {
+        document.cookie = `${TOKEN_KEY}=${encodeURIComponent(Auth.getToken())}; path=/; max-age=86400; SameSite=Lax`;
+    }
     renderAuthUI();
     setupAuthGatedNavigation();
     validateSession();

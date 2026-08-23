@@ -13,6 +13,13 @@ const LOADING_STEPS = [
 const BACKEND_BASE = 'http://127.0.0.1:8000'
 const API_BASE = `${BACKEND_BASE}/api`
 
+function getAuthToken() {
+  const local = localStorage.getItem('insightswarm_token')
+  if (local) return local
+  const match = document.cookie.match(/(^|;)\s*insightswarm_token\s*=\s*([^;]+)/)
+  return match ? decodeURIComponent(match[2]) : null
+}
+
 export default function ReportPage() {
   const { runId } = useParams()
   const navigate = useNavigate()
@@ -41,7 +48,7 @@ export default function ReportPage() {
 
     const fetchReport = async () => {
       try {
-        const token = localStorage.getItem('insightswarm_token')
+        const token = getAuthToken()
         const response = await fetch(`${API_BASE}/research/${runId}/report`, {
           headers: {
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -101,7 +108,7 @@ export default function ReportPage() {
 
     const loadPdfBlob = async () => {
       try {
-        const token = localStorage.getItem('insightswarm_token')
+        const token = getAuthToken()
         const downloadUrl = getFullDownloadUrl()
         if (!downloadUrl) return
         const response = await fetch(`${downloadUrl}?inline=true`, {
@@ -151,7 +158,7 @@ export default function ReportPage() {
     const downloadUrl = getFullDownloadUrl()
     if (!downloadUrl) return
     try {
-      const token = localStorage.getItem('insightswarm_token')
+      const token = getAuthToken()
       const response = await fetch(downloadUrl, {
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -176,7 +183,7 @@ export default function ReportPage() {
     if (execSummaryLoading) return
     setExecSummaryLoading(true)
     try {
-      const token = localStorage.getItem('insightswarm_token')
+      const token = getAuthToken()
       const response = await fetch(`${API_BASE}/research/${runId}/executive-summary`, {
         method: 'POST',
         headers: {
@@ -197,7 +204,7 @@ export default function ReportPage() {
     if (!execSummary?.download_url) return
     const url = execSummary.download_url.startsWith('/') ? `${BACKEND_BASE}${execSummary.download_url}` : execSummary.download_url
     try {
-      const token = localStorage.getItem('insightswarm_token')
+      const token = getAuthToken()
       const response = await fetch(url, {
         headers: {
           ...(token ? { 'Authorization': `Bearer ${token}` } : {})

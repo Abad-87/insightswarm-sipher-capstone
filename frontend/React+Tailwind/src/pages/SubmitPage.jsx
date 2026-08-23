@@ -81,8 +81,13 @@ export default function SubmitPage() {
 
   // Sync auth securely via localStorage, postMessage from opener, or BroadcastChannel
   useEffect(() => {
-    // 1. Check if token already exists in localStorage
-    const localToken = localStorage.getItem('insightswarm_token');
+    // 1. Check if token already exists in localStorage or cookie
+    const match = document.cookie.match(/(^|;)\s*insightswarm_token\s*=\s*([^;]+)/);
+    const cookieToken = match ? decodeURIComponent(match[2]) : null;
+    const localToken = localStorage.getItem('insightswarm_token') || cookieToken;
+    if (cookieToken && !localStorage.getItem('insightswarm_token')) {
+      localStorage.setItem('insightswarm_token', cookieToken);
+    }
     setIsLoggedIn(!!localToken);
 
     // 2. BroadcastChannel for instant cross-tab logout & login sync
