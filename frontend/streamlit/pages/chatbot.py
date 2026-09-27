@@ -538,7 +538,7 @@ def build_qa_chain(_file_hash: str, file_bytes: bytes):
         db = Chroma.from_documents(new_pages, embeddings)
         retriever = db.as_retriever(similarity_score_threshold=0.9)
 
-        llm_model = os.getenv("LLM_MODEL", "meta-llama/llama-prompt-guard-2-22m")
+        llm_model = "openai/gpt-oss-120b"
         llm = ChatGroq(model=llm_model, temperature=0.2)
 
         prompt_template = """You are a helpful AI assistant. Use the following context from the uploaded PDF document to answer the user's question clearly and concisely. If the answer cannot be found in the context, state that clearly.
