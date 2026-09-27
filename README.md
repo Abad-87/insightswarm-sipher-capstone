@@ -10,7 +10,7 @@
 
 <h3>An autonomous multi-agent research engine for academic and market intelligence</h3>
 
-<p><em>Turn fragmented information into structured, publication-ready reports with AI planning, multi-source retrieval, chart generation, image enrichment, executive summaries, and PDF export.</em></p>
+<p><em>Turn fragmented information into structured, publication-ready reports with AI planning, multi-source retrieval, chart generation, image enrichment, executive summaries and PDF export.</em></p>
 
 </div>
 
@@ -18,13 +18,13 @@
 
 InsightSwarm combines specialized AI agents into a coordinated research workflow that can:
 
-- **Orchestrate Research Pipelines**: Decompose user topics into targeted sub-queries, execute web searches via Tavily, synthesize deep analytical content, and run hallucination verification checks.
-- **Generate Publication-Quality PDFs**: Render multi-page consulting-style reports complete with cover pages, automatic Table of Contents with dotted leaders, KPI dashboard grids, and formatted references.
+- **Orchestrate Research Pipelines**: Decompose user topics into targeted sub-queries, execute web searches via Tavily, synthesize deep analytical content and run hallucination verification checks.
+- **Generate Publication-Quality PDFs**: Render multi-page consulting-style reports complete with cover pages, automatic Table of Contents with dotted leaders, KPI dashboard grids and formatted references.
 - **Produce Dynamic Data Visualizations**: Convert LLM chart schemas into native embedded charts (Bar, Donut, Line, Area charts) using Pygal/Matplotlib.
 - **Enrich Content with Images**: Automatically fetch and insert relevant web images into reports via SerpAPI with automatic image cleanup.
 - **Generate AI Executive Summaries**: Create concise standalone executive summaries with dedicated PDF export options.
-- **Expose Interactive Workspaces**: Provide a modern React web workspace for research submission, live progress tracking, and report management (downloading & deleting runs).
-- **Track System Analytics**: Monitor activity, report counts, and metadata using an integrated Streamlit dashboard.
+- **Expose Interactive Workspaces**: Provide a modern React web workspace for research submission, live progress tracking and report management (downloading & deleting runs).
+- **Track System Analytics**: Monitor activity, report counts and metadata using an integrated Streamlit dashboard.
 - **Containerized & Production Ready**: Run locally with `uv` and `npm`, or as a full containerized stack via Docker Compose.
 
 ## 🧠 Architecture overview
@@ -64,25 +64,26 @@ flowchart TD
 
 | Area | Purpose | Key files |
 | --- | --- | --- |
-| **Backend API** | Handles research job submissions, report retrieval, summary generation, and run deletions | [app/main.py](app/main.py), [app/api/routes.py](app/api/routes.py) |
-| **Research engine** | Coordinates intake, sub-question planning, search retrieval, synthesis, and fact verification | [app/graphs/research_graph.py](app/graphs/research_graph.py) |
-| **PDF export service** | Compiles markdown, KPI dashboards, Pygal charts, and images into styled PDFs via WeasyPrint | [app/services/pdf_service.py](app/services/pdf_service.py) |
+| **Backend API** | Handles research job submissions, report retrieval, summary generation and run deletions | [app/main.py](app/main.py), [app/api/routes.py](app/api/routes.py) |
+| **Research engine** | Coordinates intake, sub-question planning, search retrieval, synthesis and fact verification | [app/graphs/research_graph.py](app/graphs/research_graph.py) |
+| **PDF export service** | Compiles markdown, KPI dashboards, Pygal charts and images into styled PDFs via WeasyPrint | [app/services/pdf_service.py](app/services/pdf_service.py) |
 | **Image search service** | Fetches relevant web images via SerpAPI and handles temporary file cleanup | [app/services/image_service.py](app/services/image_service.py) |
 | **Executive summary service** | Generates condensed executive summaries and standalone PDFs from completed reports | [app/services/summary_service.py](app/services/summary_service.py) |
-| **Database layer** | Provides async SQLAlchemy database sessions, models, and schemas | [app/db/database.py](app/db/database.py), [app/models/](app/models/) |
-| **React workspace** | Modern UI for submitting topics, viewing interactive reports, downloading PDFs, and deleting runs | [frontend/React+Tailwind/src](frontend/React%2BTailwind/src) |
+| **Database layer** | Provides async SQLAlchemy database sessions, models and schemas | [app/db/database.py](app/db/database.py), [app/models/](app/models/) |
+| **React workspace** | Modern UI for submitting topics, viewing interactive reports, downloading PDFs and deleting runs | [frontend/React+Tailwind/src](frontend/React%2BTailwind/src) |
 | **Landing page** | Marketing entry page introducing platform features | [frontend/landing](frontend/landing) |
 | **Streamlit dashboard** | Light analytical dashboard for monitoring research runs and system logs | [frontend/streamlit/streamlit-app.py](frontend/streamlit/streamlit-app.py) |
 
 ## 🛠 Tech stack
 
 - **Core / Backend**: Python 3.13+, FastAPI, Uvicorn, Pydantic v2
-- **Agentic Workflow**: LangGraph, LangChain, Groq LLM (`llama-3.1-8b-instant`)
+- **Agentic Workflow**: LangGraph, LangChain, configurable LLM provider (`Google Gemini` by default via `LLM_MODEL`)
 - **Search & Media**: Tavily API (web search), SerpAPI (image retrieval)
 - **Database & ORM**: SQLAlchemy (Async), SQLite / PostgreSQL (`aiosqlite`, `psycopg2-binary`)
 - **PDF & Visuals**: WeasyPrint, Jinja2, Pygal, Pillow, Markdown
 - **Frontend Workspace**: React 19, React Router v7, Tailwind CSS v4, Framer Motion, Lucide Icons, Vite
 - **Metrics Dashboard**: Streamlit
+- **Authentication**: FastAPI Users with JWT auth (`JWT_SECRET`)
 - **DevOps & Tooling**: `uv` (package management), Docker, Docker Compose
 
 ## 📁 Repository layout
@@ -112,7 +113,7 @@ flowchart TD
 - **Python 3.13+**
 - **Node.js 18+** and **npm**
 - **`uv`** for fast Python dependency management (`pip install uv` or via installer)
-- **System Libraries for WeasyPrint**: Pango, Cairo, and GDK-PixBuf (required for local PDF generation; pre-installed in Docker setup)
+- **System Libraries for WeasyPrint**: Pango, Cairo and GDK-PixBuf (required for local PDF generation; pre-installed in Docker setup)
 - *Optional*: Docker Desktop & Docker Compose
 
 ## 🔐 Environment variables
@@ -121,10 +122,11 @@ Create a `.env` file in the project root. Refer to [.env.example](.env.example) 
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `GROQ_API_KEY` | **Yes** | API key for Groq LLM inference |
+| `GEMINI_API_KEY` | **Yes** for the default Gemini setup | API key for Google Generative AI inference |
+| `JWT_SECRET` | **Yes** | Secret used by FastAPI Users for JWT authentication |
 | `TAVILY_API_KEY` | **Yes** | API key for Tavily web search retrieval |
 | `SERPAPI_API_KEY` | Optional | API key for Google Image search via SerpAPI in generated reports |
-| `LLM_MODEL` | Optional | Groq model selection (default: `llama-3.1-8b-instant`) |
+| `LLM_MODEL` | Optional | LLM model name; current default config uses Gemini, e.g. `gemini-3.8-flash` |
 | `DATABASE_URL` | Optional | Database connection URL (default: `sqlite+aiosqlite:///research_app.db`) |
 | `REPORT_DIR` | Optional | Output folder for PDF files (default: `reports`) |
 | `TAVILY_MAX_RESULTS` | Optional | Max search results per sub-query (default: `3`) |
@@ -133,16 +135,21 @@ Create a `.env` file in the project root. Refer to [.env.example](.env.example) 
 | `LOG_LEVEL` | Optional | Logging level (`INFO`, `DEBUG`, `WARNING`, `ERROR`) |
 | `LANGSMITH_TRACING` | Optional | Set to `true` to enable LangChain / LangSmith tracing |
 | `LANGSMITH_API_KEY` | Optional | API key for LangSmith observability |
+| `LANGSMITH_ENDPOINT` | Optional | LangSmith API endpoint (default: `https://api.smith.langchain.com`) |
 
 Minimal `.env` setup:
 
 ```env
-GROQ_API_KEY=your_groq_api_key
+GEMINI_API_KEY=your_google_gemini_key
+JWT_SECRET=your_secure_jwt_secret
 TAVILY_API_KEY=your_tavily_api_key
 SERPAPI_API_KEY=your_serpapi_key
+LLM_MODEL=gemini-3.8-flash
 DATABASE_URL=sqlite+aiosqlite:///research_app.db
 REPORT_DIR=reports
 ```
+
+> If you choose to switch the LLM provider to Groq instead, add `GROQ_API_KEY` and update the provider wiring in [app/graphs/research_graph.py](app/graphs/research_graph.py).
 
 ## ▶️ Local setup
 
@@ -154,6 +161,8 @@ Install Python dependencies and launch the server:
 uv sync
 uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+This project requires a valid `JWT_SECRET` in the root `.env` file because the API mounts JWT auth routes for registration, login and user management.
 
 Useful backend endpoints:
 
@@ -222,17 +231,17 @@ docker compose -f devops/docker-compose.yml down
 | `GET` | `/api/research/{run_id}/download` | Download or inline-preview the generated PDF report |
 | `POST` | `/api/research/{run_id}/executive-summary` | Generate an AI executive summary for a report |
 | `GET` | `/api/research/{run_id}/executive-summary/download` | Download or preview the Executive Summary PDF |
-| `DELETE` | `/api/research/{run_id}/delete` | Delete a research run, report, and stored PDF assets |
+| `DELETE` | `/api/research/{run_id}/delete` | Delete a research run, report and stored PDF assets |
 
 ## 🔄 How it works
 
 1. **Submission**: User submits a topic and research instructions in the React workspace.
 2. **Background Run Creation**: FastAPI creates a database record and launches a background LangGraph agent loop.
 3. **Planner & Search**: The **Planner** breaks down the prompt into sub-questions. The **Searcher** queries Tavily for web sources.
-4. **Synthesis & Charts**: The **Synthesizer** drafts the report, generating KPI metrics, tabular data, JSON chart definitions, and image search queries.
+4. **Synthesis & Charts**: The **Synthesizer** drafts the report, generating KPI metrics, tabular data, JSON chart definitions and image search queries.
 5. **Verification**: The **Verifier** inspects the draft against retrieved sources for accuracy before final rendering.
-6. **PDF & Image Generation**: Markdown is compiled into HTML. Embedded charts are rendered using Pygal/Matplotlib, images are downloaded via SerpAPI (and cleaned up), and WeasyPrint generates the PDF document.
-7. **Delivery & Executive Summary**: The frontend displays the report, renders live interactive components, supports downloading PDFs, and enables one-click Executive Summary generation.
+6. **PDF & Image Generation**: Markdown is compiled into HTML. Embedded charts are rendered using Pygal/Matplotlib, images are downloaded via SerpAPI (and cleaned up) and WeasyPrint generates the PDF document.
+7. **Delivery & Executive Summary**: The frontend displays the report, renders live interactive components, supports downloading PDFs and enables one-click Executive Summary generation.
 
 ## 🚀 Deployment
 
@@ -246,4 +255,4 @@ For instructions on deploying InsightSwarm to free-tier cloud platforms (Render 
 
 ## 🤝 Contributing
 
-Contributions and feature suggestions are welcome! Please ensure any changes keep `README.md`, environment configuration templates, and API endpoints up to date.
+Contributions and feature suggestions are welcome! Please ensure any changes keep `README.md`, environment configuration templates and API endpoints up to date.
