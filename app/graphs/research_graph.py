@@ -4,6 +4,7 @@ import operator
 import os
 from langchain_tavily import TavilySearch
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
@@ -13,7 +14,8 @@ load_dotenv()
 
 # --- Initializations ---
 llm_model = os.getenv("LLM_MODEL", "meta-llama/llama-prompt-guard-2-22m")
-llm = ChatGroq(model=llm_model, temperature=0)
+# llm = ChatGroq(model=llm_model, temperature=0)
+llm = ChatGoogleGenerativeAI(model=llm_model)
 
 # Initialize the Tavily Search Tool
 tavily_search = TavilySearch(
